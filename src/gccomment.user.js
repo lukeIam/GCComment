@@ -2255,7 +2255,7 @@ function doDropboxAction(fnOnSuccess) {
 	// wir sind auf der Detailbeschreibungsseite eines Caches
 	function gccommentOnDetailpage() {
 		appendCSS('text', '#gccommenttextarea{font-family:monospace;font-size:medium}');
-		var findtag = document.getElementById('ctl00_ContentBody_uxFindLinksHeader');
+		var findtag = document.getElementById('ctl00_ContentBody_uxFindLinksHeader')||document.getElementsByClassName("pmo-upsell")[0];
 		if (findtag) {
 			AddComment = document.createElement('a');
 			var imgAdd = document.createElement('img');
@@ -2404,7 +2404,9 @@ function doDropboxAction(fnOnSuccess) {
 						$table.remove();
 					}
 					detailCommentCacheState.setAttribute('disabled', '');
-					detailFinalCacheState.options.selectedIndex = detailCommentCacheState.options.selectedIndex = 0;
+					if(detailFinalCacheState){
+						detailFinalCacheState.options.selectedIndex = detailCommentCacheState.options.selectedIndex = 0;
+					}
 					detailCommentTextArea.value = "";
 					detailCommentTextPane.innerHTML = "";
 					detailCommentTextArea.style.display = 'none';
@@ -2418,28 +2420,62 @@ function doDropboxAction(fnOnSuccess) {
 					EditCancelComment.style.display = 'none';
 					detailCommentInputLatLng.setAttribute('disabled', '');
 					detailCommentInputLatLng.value = DEFAULTCOORDS;
-					detailFinalInputLatLng.value = DEFAULTCOORDS;
+					if(detailFinalInputLatLng){
+						detailFinalInputLatLng.value = DEFAULTCOORDS;
+					}					
 					updateSaveTime(-1);
 				}
 			}, false);
-
-			var url = document.getElementById('ctl00_ContentBody_lnkPrintFriendly').getAttribute('href');
-			var guidIndex = url.indexOf('guid=');
-			var length = "3331cc55-49a2-4883-a5ad-06657e8c1aab".length;
-			currentCacheGUID = url.substr(guidIndex + 5, length);
-			currentCacheCode = trim(document
-					.getElementById('ctl00_ContentBody_CoordInfoLinkControl1_uxCoordInfoCode').innerHTML);
-			currentCacheName = unescapeXML(trim(document.getElementById('ctl00_ContentBody_CacheName').innerHTML));
-
-			// laden des aktuellen comments
-			currentComment = doLoadCommentFromGUID(currentCacheGUID);
-			var orig = retrieveOriginalCoordinates();
-			if (currentComment && orig.length === 2) {
-				if (!currentComment.origlat || !currentComment.origlng) {
-					currentComment.origlat = orig[0];
-					currentComment.origlng = orig[1];
-					doSaveCommentToGUID(currentComment);
+			
+			function to12DigitHex(str){
+				var hex;
+				var result = "";
+				for (var i=0; i<str.length; i++) {
+					hex = str.charCodeAt(i).toString(16);
+					result += hex;
 				}
+				return ("000000000000"+result).substring(result.length).toUpperCase();
+			}
+			
+			var printLink = document.getElementById('ctl00_ContentBody_lnkPrintFriendly');
+			if(printLink){
+				var url = printLink.getAttribute('href');
+				var guidIndex = url.indexOf('guid=');
+				var length = "3331cc55-49a2-4883-a5ad-06657e8c1aab".length;
+				currentCacheGUID = url.substr(guidIndex + 5, length);
+				currentCacheCode = trim(document
+						.getElementById('ctl00_ContentBody_CoordInfoLinkControl1_uxCoordInfoCode').innerHTML);
+				currentCacheName = unescapeXML(trim(document.getElementById('ctl00_ContentBody_CacheName').innerHTML));
+
+				// laden des aktuellen comments
+				currentComment = doLoadCommentFromGUID(currentCacheGUID);
+				if(!currentComment){					
+					currentComment = doLoadCommentFromGCCode(currentCacheCode);
+					//Update dummy guid to real guid
+					if(currentComment){
+						currentComment.guid = currentCacheGUID;
+						doSaveCommentToGUID(currentComment);
+					}					
+				}
+				var orig = retrieveOriginalCoordinates();
+				if (currentComment && orig.length === 2) {
+					if (!currentComment.origlat || !currentComment.origlng) {
+						currentComment.origlat = orig[0];
+						currentComment.origlng = orig[1];
+						doSaveCommentToGUID(currentComment);
+					}
+				}
+			}
+			else{
+				var gccodeFields = document.getElementsByClassName("li__gccode");
+				if(gccodeFields.length > 0){
+					currentCacheCode = gccodeFields[0].innerText.trim();
+					currentCacheName = document.getElementsByClassName('heading-3')[0].innerText.trim();
+					currentCacheGUID = "00000000-0000-0000-0000-" + to12DigitHex(currentCacheCode.substr(2)); //DummyId
+
+					// laden des aktuellen comments
+					currentComment = doLoadCommentFromGCCode(currentCacheCode);						
+				}				
 			}
 			
 			var add2Archive = function(){
@@ -2613,6 +2649,7 @@ function doDropboxAction(fnOnSuccess) {
 		waitingTag.setAttribute('style', 'padding-right:5px');
 
 		var hookTBody = document.getElementById('Print');
+		
 		if (hookTBody) {
 			var mysteryRow = document.createElement('div');
 			mysteryRow.setAttribute('class', 'LocationData');
@@ -2772,11 +2809,16 @@ function doDropboxAction(fnOnSuccess) {
 			mysteryData.appendChild(SaveFinalCoords);
 			mysteryData.appendChild(DeleteFinalCoords);
 		}
-
+		
 		// check for waypoints header and add if not present
 		var waypointElement = document.getElementById('ctl00_ContentBody_WaypointsInfo');
-		if (!waypointElement) {			
-			$('#ctl00_ContentBody_bottomSection > p:first').first().html('<span id="ctl00_ContentBody_WaypointsInfo" style="font-weight:bold;">Additional Waypoints</span><br>');
+		if (!waypointElement) {
+			if($('#ctl00_ContentBody_bottomSection').length > 0){
+				$('#ctl00_ContentBody_bottomSection > p:first').first().html('<span id="ctl00_ContentBody_WaypointsInfo" style="font-weight:bold;">Additional Waypoints</span><br>');
+			}
+			else{
+				$('.pmo-banner').after('<span id="ctl00_ContentBody_WaypointsInfo" style="font-weight:bold;">Additional Waypoints</span><br>');
+			}
 		}
 
 		// add link to add waypoints
@@ -2845,7 +2887,13 @@ function doDropboxAction(fnOnSuccess) {
 							var wpttable = document.getElementById('ctl00_ContentBody_Waypoints');
 							if (!wpttable) {
 								var table = $('<table id="ctl00_ContentBody_Waypoints" class="Table"><thead><tr><th class="AlignCenter" scope="col"><th scope="col">   </th><th scope="col">   </th><th scope="col"> Prefix </th><th scope="col"> Lookup </th><th scope="col"> Name </th><th scope="col"> Coordinate </th><th scope="col">   </th></tr></thead><tbody></tbody></table>');
-								$('#ctl00_ContentBody_bottomSection > p:first').after(table);
+								if($('#ctl00_ContentBody_bottomSection').length > 0){
+									$('#ctl00_ContentBody_bottomSection > p:first').after(table);
+								}
+								else{
+									$('#ctl00_ContentBody_WaypointsInfo').after(table);
+									appendCSS('text', "table.Table th,td.TableHeader,th.TableHeader{background-color:#e3ddc2;border:2px solid #fff;border-top:none;font-weight:700}table.Table td{background-color:#fff;border-left:2px solid #fff;border-right:2px solid #fff}table.Table th,table.Table td{margin:0;padding:.5em;text-align:left}");
+								}
 							}
 							$('#ctl00_ContentBody_Waypoints > tbody').append(row);// .append("<tr/>");
 						});
@@ -2856,7 +2904,13 @@ function doDropboxAction(fnOnSuccess) {
 			var wpttable = document.getElementById('ctl00_ContentBody_Waypoints');
 			if (!wpttable) {
 				var table = $('<table id="ctl00_ContentBody_Waypoints" class="Table"><thead><tr><th class="AlignCenter" scope="col"><th scope="col">   </th><th scope="col">   </th><th scope="col"> Prefix </th><th scope="col"> Lookup </th><th scope="col"> Name </th><th scope="col"> Coordinate </th><th scope="col">   </th></tr></thead><tbody></tbody></table>');
-				$('#ctl00_ContentBody_bottomSection > p:first').after(table);
+				if($('#ctl00_ContentBody_bottomSection').length > 0){
+					$('#ctl00_ContentBody_bottomSection > p:first').after(table);
+				}
+				else{
+					$('#ctl00_ContentBody_WaypointsInfo').after(table);
+					appendCSS('text', "table.Table th,td.TableHeader,th.TableHeader{background-color:#e3ddc2;border:2px solid #fff;border-top:none;font-weight:700}table.Table td{background-color:#fff;border-left:2px solid #fff;border-right:2px solid #fff}table.Table th,table.Table td{margin:0;padding:.5em;text-align:left}");
+				}				
 				wpttable = table[0];
 			}
 
@@ -3366,7 +3420,7 @@ function doDropboxAction(fnOnSuccess) {
 			if (commentKey.indexOf(COMPREFIX) == -1)
 				continue;
 
-			tr = document.createElement('tr');
+			tr = document.createElement('tr');			
 			var comment = doLoadCommentFromGUID(commentKey.substr(COMPREFIX.length));
 
 			if (!comment.state || (comment.state == "undefined") || (comment.state == undefined))
@@ -3422,7 +3476,13 @@ function doDropboxAction(fnOnSuccess) {
 
 			var guid = commentKey.replace(/gccomment/, '');
 			var link = document.createElement('a');
-			link.href = 'http://www.geocaching.com/seek/cache_details.aspx?guid=' + guid;
+			if(guid.indexOf("00000000-0000") !== -1){
+				link.href = 'http://www.geocaching.com/seek/cache_details.aspx?wp=' + comment.gccode;
+			}
+			else
+			{
+				link.href = 'http://www.geocaching.com/seek/cache_details.aspx?guid=' + guid;
+			}			
 			link.appendChild(document.createTextNode(comment.name + " (" + comment.gccode + ")"));
 			td_guid.appendChild(link);
 			if ((comment.lat != null) && (comment.lng != null)) {
@@ -3511,7 +3571,7 @@ function doDropboxAction(fnOnSuccess) {
 
 					if (action === "del") {
 						var oldcomment = doLoadCommentFromGUID(guid);
-						log('info', 'deleting: ' + oldcomment);
+						log('info', 'deleting: ' + oldcomment);						
 						deleteComment(oldcomment.guid, oldcomment.gccode);
 					}
 					if (GM_getValue(LAZY_TABLE_REFRESH) == 0) {
@@ -3528,7 +3588,12 @@ function doDropboxAction(fnOnSuccess) {
 			editimg.title = lang.table_editondetail;
 			action_edit.appendChild(editimg);
 			action_edit.setAttribute('style', 'margin-right:3px');
-			action_edit.href = "http://www.geocaching.com/seek/cache_details.aspx?guid=" + guid + "#mycomments";
+			if(guid.indexOf("00000000-0000") !== -1){
+				action_edit.href = "http://www.geocaching.com/seek/cache_details.aspx?wp=" + comment.gccode + "#mycomments";
+			}
+			else{
+				action_edit.href = "http://www.geocaching.com/seek/cache_details.aspx?guid=" + guid + "#mycomments";
+			}
 			td_action.appendChild(action_edit);
 
 			if (comment.archived === ARCHIVED) {
@@ -4115,12 +4180,12 @@ function doDropboxAction(fnOnSuccess) {
 	};
 
 	function retrieveOriginalCoordinates() {
-		var origCoordinates;
+		var origCoordinates = [];
 		// try to get it from GS
 		if (unsafeWindow.userDefinedCoords && unsafeWindow.userDefinedCoords.data
 				&& unsafeWindow.userDefinedCoords.data.oldLatLngDisplay) {
 			origCoordinates = parseCoordinates(unsafeWindow.userDefinedCoords.data.oldLatLngDisplay);
-		} else { // grab it from page
+		} else if(document.getElementById('uxLatLon') !== null) { // grab it from page		
 			origCoordinates = parseCoordinates(document.getElementById('uxLatLon').innerHTML);
 		}
 
@@ -4285,7 +4350,10 @@ function doDropboxAction(fnOnSuccess) {
 			alert(lang.alert_couldnotparse + fin[0]);
 			return;
 		}
-		detailFinalCacheState.options.selectedIndex = detailCommentCacheState.options.selectedIndex;
+		
+		if(detailFinalCacheState){
+			detailFinalCacheState.options.selectedIndex = detailCommentCacheState.options.selectedIndex;
+		}		
 
 		detailCommentCacheState.setAttribute('disabled', '');
 		detailCommentTextArea.style.display = 'none';
@@ -4316,7 +4384,9 @@ function doDropboxAction(fnOnSuccess) {
 			clean = convertDec2DMS(currentComment.lat, currentComment.lng);
 		}
 		detailCommentInputLatLng.value = clean;
-		detailFinalInputLatLng.value = clean;
+		if(detailFinalInputLatLng){
+			detailFinalInputLatLng.value = clean;
+		}		
 	}
 
 	function changeState(event) {
